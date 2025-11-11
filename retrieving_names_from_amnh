@@ -1,0 +1,114 @@
+## Web scrapping
+#amnh_url<- "http://research.amnh.org/vz/herpetology/amphibia/index.php/" ## the website url where the search is going to be conducted
+
+#final_table<-as.data.frame(matrix(nrow = 0, ncol = 14)) #table where data will be stored. Table with 14 columns and n rows (number of taxon in superfamily)
+#colnames(final_table)<-c("Class", "Order", "Superfamily", "family", "subfamily", "genus", "species", "n_syn", 
+#                         "eng_name", "distribution", "comments", "url", "access", "reference")
+
+
+
+#write.csv(final_table, "dendrobatoidea.csv")
+
+#keyword<-c("dendrobatoidea", ""
+#install.packages("Rcrawler")
+
+amnh_serch(keyword)
+#output seria uma tabela com as informações de todas as espécies dentro dessa keyword
+
+#carregar o pacote Rcrawler
+
+#######
+amnh_search <- function(base_url, keyword){
+  
+  if(!require("Rcrawler", character.only=TRUE)){
+    install.packages("Rcrawler", dep=T)
+  }
+  
+  Rcrawler(
+    Website = base_url,
+    no_cores = 4,
+    no_conn = 4,
+    dataUrlfilter = paste(base_url, "//Amphibia/Anura/", keyword, '/[^"]+/', sep="")
+  )
+  
+  # views <- ContentScraper(
+  #   Url = INDEX$Url,
+  #   CssPatterns =c("#taxonomy_nav"),
+  #   ManyPerPattern = TRUE
+  # )
+  
+  #   res_files <- list.files(pattern="^research")
+  #   
+  #   if(length(res_files) == 1){
+  #     
+  #     data <- LoadHTMLFiles(res_files, type="vector")
+  #     
+  #   }else{
+  #     
+  #     df_choose <- data.frame(
+  #       Name = res_files,
+  #       Number = seq(length(res_files))
+  #     )
+  #     
+  #     print(df_choose)
+  #     
+  #     res_chosen <- as.numeric(readline("Choose a file from the data frame above: "))
+  #     
+  #     data <- LoadHTMLFiles(res_files[res_chosen], type="vector")
+  #   }
+  #   
+  
+  # url_lst <- vector("list", nrow(INDEX))
+  # 
+  # for(x in INDEX$Url){
+  #   
+  #   url_lst[x] <- Rcrawler(
+  #     Website = x,
+  #     no_cores = 4,
+  #     no_conn = 4,
+  #     dataUrlfilter = "//*/div[@id='aswContent']//div[@class='taxa']",
+  #     crawlUrlfilter = "//*/div[@id='aswContent']//div[@class='taxa']"
+  #   )
+  # }
+  # 
+  # print(url_list)
+  
+}
+
+amnh_search(base_url = "http://research.amnh.org/vz/herpetology/amphibia/index.php", keyword = "Mantellidae")
+
+#write.csv(INDEX, "mantellidae_links.csv")
+
+mantellidae<-INDEX
+# ContentScraper(
+#   Url ="http://research.amnh.org/vz/herpetology/amphibia/index.php",
+#   XpathPatterns="//*/a/@href]",
+#   ManyPerPattern = TRUE
+# )
+
+urls<-rbind(dendro, mantellidae)
+#write.csv(urls, "urls_aposematism.csv")
+target_urls<-which(urls$Level==3)
+target_urls<-urls[which(urls$Level==3), 2]
+
+###############################################################
+###############################################################
+
+library(rvest)
+urls<-read.csv("urls.csv")
+urls<-as.vector(urls$Url)
+css<-"p:nth-child(7) , p:nth-child(9) , #aswContent p:nth-child(5) , span:nth-child(6) , span:nth-child(5) , span:nth-child(4) , span:nth-child(7)"
+link<-read_html(urls[29])
+nodes<-html_nodes(link, css=css)
+
+info<-data.frame()
+
+for(i in 1:length(urls)){
+  link<-read_html(urls[i])
+  nodes<-html_nodes(link, css=css)
+  for(j in 1:length(nodes)){
+    info[i,j]<-html_text(nodes[j])
+  }
+}
+
+write.csv(info, "info.csv")
