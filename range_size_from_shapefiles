@@ -1,0 +1,93 @@
+library(adehabitatHR)
+library(sp)
+
+data1<-read.csv("dataset_1.csv")
+data2<-read.csv("final_dataset_2.csv")
+dfmcp<-rbind(data1,data2)
+coord<-rbind(data1,data2)
+
+
+coord<-SpatialPoints(coord[,2:3], proj4string =  CRS("+proj=longlat +datum=WGS84 +init=epsg:4326 +units=m +no_defs"))
+coord<-spTransform(coord, CRS("+proj=utm +datum=WGS84 +init=epsg:4326 +units=m +no_defs"))
+
+class(coord)
+
+coordinates(dfmcp)<-c("Longitude", "Latitude")
+proj4string(dfmcp) <- CRS( "+proj=longlat +datum=WGS84 +init=epsg:4326 +units=m +no_defs")
+
+dfmcp<-spTransform(dfmcp, CRS("+proj=utm +datum=WGS84 +init=epsg:4326 +units=m +no_defs"))
+class(dfmcp)
+
+spmcp<-mcp(dfmcp, percent=100, unin= "m", unout = "m2")
+
+class(spmcp)
+
+
+ud<-kernelUD(dfmcp,h="href",	kern="bivnorm",	grid=10000)
+vertices<-getverticeshr(ud,95)
+
+
+library(scales) # Helps make polygons partly transparent using the alpha argument below
+plot(spmcp, col = as.factor(spmcp@data$id), pch = 16)
+plot(spmcp, col = alpha(1:5, 0.5), add = TRUE)
+
+# Transform the point and MCP objects. 
+turtles.spgeo <- spTransform(dfmcp, CRS( "+proj=longlat +datum=WGS84 +init=epsg:4326 +units=m +no_defs"))
+turtles.mcpgeo<- spTransform(spmcp, CRS( "+proj=longlat +datum=WGS84 +init=epsg:4326 +units=m +no_defs"))
+
+# Download tiles using ggmap
+library(ggmap)
+
+# Google tiles (requires a key first)
+## Guide on getting a key: https://www.r-bloggers.com/geocoding-with-ggmap-and-the-google-api/
+register_google(key = "AIzaSyDiEvRU67ly3Zb1b-JNSifpBtPRx-xNWIM")
+#mybasemap <- get_map(location = c(lon = mean(turtles.spgeo@coords[,1]), 
+#                                   lat = mean(turtles.spgeo@coords[,2])), 
+#                      source = "google", 
+#                      zoom = 25,
+#                     maptype = 'satellite')
+
+mybasemap <- get_stamenmap(bbox = c(left = min(dfmcp@coords[,1])-0.01, 
+                                    bottom = min(dfmcp@coords[,2])-0.5, 
+                                    right = max(dfmcp@coords[,1])+0.01, 
+                                    top = max(dfmcp@coords[,2])+0.01), 
+                           zoom = 0)
+
+# Turn the spatial data frame of points into just a dataframe for plotting in ggmap
+
+turtles.geo<-data.frame(turtles.spgeo@coords, id=turtles.spgeo@data$species)
+
+
+mymap.hr <- ggmap(mybasemap) + 
+  geom_polygon(data = fortify(spmcp),  
+               # Polygon layer needs to be "fortified" to add geometry to the dataframe
+               aes(long, lat, color=id),
+               alpha = 0.3) + theme(legend.position = "none")
+mymap.hr
+
+library(maptools)
+writePolyShape(spmcp, "MCPhomerange")
+
+############################################################
+
+library(rgdal)
+# Now load the Mammals' shapefile: MAMMTERR.shp.
+dsn<-"C:/Users/piken/OneDrive/Área de Trabalho/scrap/mcp"
+shp<- readOGR(dsn = dsn, "MCPhomerange")
+
+sp<-shp@data[c(1:110),1]
+
+length(sp)
+
+proj4string(shp) <- CRS( "+proj=longlat +datum=WGS84 +init=epsg:4326 +units=m +no_defs")
+
+
+setwd("C:/Users/piken/OneDrive/Área de Trabalho/scrap/individuals_mcps")
+
+for (i in 1:1) {
+  tmp <- shp[shp$binomial == as.character(sp[i]), ]
+  writeOGR(tmp, dsn=getwd(), sp[i], driver="ESRI Shapefile",
+           overwrite_layer=TRUE)
+}
+
+write.csv(rgsize, "rgsize.csv")
