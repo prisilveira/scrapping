@@ -1,0 +1,326 @@
+#############################
+#Entering R
+#############################
+
+# First, install and load 'sp' and 'rgdal' packages:
+
+#install.packages("sp")
+#install.packages("rgdal")
+library(sp)
+library(rgdal)
+library(dplyr)
+library(raster)
+library(maptools)
+library(rgeos)
+library(letsR)
+
+# Now load the Mammals' shapefile: MAMMTERR.shp.
+dsn<-"C:/Users/piken/OneDrive/?rea de Trabalho/scrap/ANURA"
+shp<- readOGR(dsn = dsn, "ANURA")
+
+
+# As we want to create one shapefile for each species, 
+#we will choose the 'BINOMIAL' vector. In that way, 
+#we first determine the names and the number of species we are using.
+
+unique <- unique(shp@data$binomial)
+
+setwd("C:/Users/piken/OneDrive/?rea de Trabalho/scrap")
+species<-read.csv("info.csv")
+sp<-as.vector(species$species)
+
+no_shapefile<-which(is.na(match(sp, unique)))
+
+
+# Finally, we use a loop to save shapefiles for each species. It will take a lot of time to generate files, so do not type this now, just observe:
+
+length(sp)
+setwd("C:/Users/piken/OneDrive/Área de Trabalho/scrap/shapes")
+
+for (i in 1:length(sp)) {
+    tmp <- shp[shp$binomial == as.character(sp[i]), ]
+  writeOGR(tmp, dsn=getwd(), sp[i], driver="ESRI Shapefile",
+           overwrite_layer=TRUE)
+   }
+
+
+###########################################################
+
+
+setwd("C:/Users/piken/OneDrive/Área de Trabalho/scrap")
+dem<-raster("dem_neotropics.tif")
+
+setwd("C:/Users/piken/OneDrive/Área de Trabalho/scrap/shapes")
+
+
+shps<-list.files(pattern = '*.shp')
+
+df<-data.frame(matrix(NA, nrow = length(shps), ncol = 3))
+colnames(df)<-c("species", "min", "max")
+
+for(i in 292:length(shps)){
+  shp<-readOGR(dsn= ".", layer = tools::file_path_sans_ext(shps[i]))
+  v<-extract(dem, shp)
+  df$min[i]<-min(unlist(v))
+  df$max[i]<-max(unlist(v))
+  df$species[i]<-tools::file_path_sans_ext(shps[i])
+}
+
+write.csv(df, "elevation_data.csv")
+
+
+
+######################################################
+
+setwd("C:/Users/piken/OneDrive/Área de Trabalho/scrap")
+lowland<-read.csv("lowland_dendroaromo.csv", stringsAsFactors = F)
+
+#occ<-read.csv("occurence_maxent.csv")
+
+plot(dem)
+plot(shp, add=T)
+points(occ$Longitude, occ$Latitude, cex= 0.5)
+
+
+setwd("C:/Users/piken/OneDrive/Área de Trabalho/scrap/shapes")
+
+
+
+shps<-list.files(pattern = '*.shp')
+
+sortocc<-as.data.frame(occ)
+sortocc<-sortocc[with(occ, order(occ$species)),]
+#write.csv(sortocc, "sortocc.csv") ## occurence_maxent.csv in alphabetic order
+
+
+
+test<-matrix(NA, nrow= length(which(sortocc$species == shp$binomial)), ncol=2)
+colnames(test)<-c("long", "lat")
+
+test[,1]<-sortocc$Longitude[min(which(sortocc$species == shp$binomial)):max(which(sortocc$species == shp$binomial))]
+test[,2]<-sortocc$Latitude[min(which(sortocc$species == shp$binomial)):max(which(sortocc$species == shp$binomial))]
+test<-SpatialPoints(test, proj4string = CRS(proj4string(dem)))
+coord<-test[shp]
+test<-SpatialPoints(test, proj4string = CRS(proj4string(dem)))
+coord<-test[shp]
+
+spnames_occ<-as.vector(unique(sortocc$species))
+row_numbers<-c(which(spnames_occ%in%lowland$species)) #163
+sp_iucngbif<-spnames_occ[c(row_numbers)]
+
+plot(dem)
+shp<-readOGR(dsn= ".", layer = tools::file_path_sans_ext(shps[2]))
+plot(shp, add = T)
+points(coord, cex=0.5)
+points(sortocc$Longitude[64:90], sortocc$Latitude[64:90], cex= 0.5)
+
+
+sortocc<-read.csv("sortocc.csv", stringsAsFactors = F)
+sortocc<-sortocc[,-1]
+
+
+
+##################################################################
+df<-matrix(nrow=0, ncol = 3)
+colnames(df)<-c("Species", "Longitude", "Latitude")
+
+
+setwd("C:/Users/piken/OneDrive/Área de Trabalho/scrap/shapes")
+
+for(i in 1:length(sp_iucngbif)){
+
+  shp<-readOGR(dsn= ".", layer = tools::file_path_sans_ext(paste0(sp_iucngbif[i], ".shp")))
+  
+  
+  test<-matrix(NA, nrow= length(which(sortocc$species == shp$binomial)), ncol=2)
+  colnames(test)<-c("long", "lat")
+  
+  test[,1]<-sortocc$Longitude[min(which(sortocc$species == shp$binomial)):max(which(sortocc$species == shp$binomial))]
+  test[,2]<-sortocc$Latitude[min(which(sortocc$species == shp$binomial)):max(which(sortocc$species == shp$binomial))]
+  test<-SpatialPoints(test, proj4string = CRS(proj4string(dem)))
+  
+  coord<-test[shp]
+  
+  dftemp<-matrix(nrow= nrow(coord@coords), ncol = 3)
+  colnames(dftemp)<-c("Species", "Longitude", "Latitude")
+  dftemp[,1]<-as.character(rep(unique(shp$binomial), length(dftemp[,1])))
+  dftemp[,2]<-coord@coords[,1]
+  dftemp[,3]<-coord@coords[,2]
+  
+  df<-rbind(df, dftemp)
+}
+
+
+setwd("C:/Users/piken/OneDrive/Área de Trabalho/scrap")
+#write.csv(df, "final_occ_maxent.csv")
+
+new_data<-read.csv("spocc_count7.csv")
+head(new_data)
+#plot(dem)
+#plot(shp, add = T)
+#points(coord, cex=0.5)
+#points(sortocc$Longitude[29781:30104], sortocc$Latitude[29781:30104], cex= 0.5)
+
+
+unikdf<-as.data.frame(unique(new_data))
+#write.csv(unikdf, "unique_maxent_data.csv")
+
+
+count<-as.data.frame(unikdf%>% group_by(species) %>% tally())
+write.csv(count, "count_spocc_count7.csv")
+
+
+
+######### not considering IUCN polygons
+
+count2<-as.data.frame(sortocc%>% group_by(species) %>% tally())
+write.csv(count2, "count2_occ.csv")
+
+count2_unique<-as.data.frame(unique(sortocc))
+write.csv(count2_unique, "spocc_count3.csv")
+
+count3<-as.data.frame(count2_unique%>% group_by(species) %>% tally())
+write.csv(count3, "countsp_occ.csv") #numer of records fo each species from gbif
+
+df<-read.csv("spocc_count8.csv")
+count4<-as.data.frame(df%>%group_by(species) %>% tally())
+head(count4)
+write.csv(count4, "count4.csv")
+
+count5<-read.csv(count4)
+
+for(i in 1:nrow(count4))
+
+
+#########
+
+setwd("C:/Users/piken/OneDrive/Área de Trabalho/scrap")
+rpalm<-read.csv("rpalm.csv")
+apic<-read.csv("apicta.csv")
+abom<-read.csv("abomb.csv")
+
+coordinates(apic)~long+lat
+
+points<-SpatialPointsDataFrame(apic[,2:3], apic)
+points
+
+library(rgdal)
+setwd("C:/Users/piken/OneDrive/Área de Trabalho/scrap/shapes")
+shp<-readOGR(dsn= ".", layer = tools::file_path_sans_ext(paste0(shps[471])))
+
+library(spatialEco)
+rpalm<-erase.point(points, shp, inside = F)
+
+plot(dem)
+plot(shp, add=T)
+points(rpalm$long, rpalm$lat, cex=0.5)
+
+setwd("C:/Users/piken/OneDrive/Área de Trabalho/scrap")
+write.csv(rpalm, "apic_clean.csv")
+
+library(sp)
+
+
+#################
+### Creating a presence absence grid
+library(letsR)
+oc_records<- read.csv("C:/Users/piken/OneDrive/Área de Trabalho/scrap/spocc_count7.csv", head=T, sep=",")
+
+head(oc_records)
+abs.pres<- lets.presab.points(oc_records[,2:3],oc_records[,1],xmn=-90, xmx=-30, ymn=-60, ymx=30, resol=0.01, remove.cells=TRUE, remove.sp=TRUE, show.matrix=F,crs=CRS("+proj=longlat +datum=WGS84"), count=FALSE)
+
+abs.pres<- abs.pres[[1]] #pega os valores de presenca para fazer um grid baseado nele
+
+########### Download data from Chelsa
+library(woodivsdm)
+varnames<-read.csv("chelsa_variables.csv", header = F)
+
+wget_chelsa("C:/Users/piken/Downloads/Chelsa", vars= c(1:19), horizons = "1979-2013")
+
+##### import all raster files
+setwd("C:/Users/piken/OneDrive/Área de Trabalho/scrap/chelsa")
+library(raster)
+rasterlist<-list.files(pattern="*.tif$")
+rasterlist
+var<-raster::stack(rasterlist)
+
+
+###### build environmental matrix
+#abspres<-read.csv("abspres.csv")
+#head(abspres)
+#abspres<-abspres[c(2:ncol(abspres))]
+#vari.matriz<- as.data.frame(extract(var,abspres[,1:2],cellnumbers=T)) #colums 1 and 2 are longitude e latitude from abs.pres
+
+varmatrix<- as.data.frame(extract(var,oc_records[,2:3],cellnumbers=F)) #extract climate data for each longlat
+head(varmatrix)
+
+varmatrix<-cbind(varmatrix, coordinates(var)[varmatrix[,1],])
+head(varmatrix)
+
+
+data<-data.frame(species=character(), long=numeric(), lat=numeric(), bio1=numeric(), bio2= numeric(), bio13=numeric(), bio14=numeric())
+
+long<-0
+lat<-0
+species<-0
+
+for(j in 1:1){
+  
+  for(i in 1:nrow(abspres)){
+    
+    if(abspres[i,(j+2)]==1){
+      long<-abspres$Longitude.x.[i,j]
+      lat<-abspres$Latitude.y.[i,j]
+      species<-names(abspres[j])
+      print(i)
+    }
+    
+  for(k in 1:nrow(climatevar)){
+      if(climatevar$x[k]==long && climatevar$y[k]==lat){
+    
+      for(l in 1:nrow(oc_records)){
+  
+        data$species[l]<-species
+        data$long[l]<-long
+        data$lat[l]<-lat
+        data$bio1[l]<-climatevar$clip_CHELSA_bio10_01
+        data$bio2[l]<-climatevar$clip_CHELSA_bio10_02
+        data$bio13[l]<-climatevar$clip_CHELSA_bio10_13
+        data$bio14[l]<-climatevar$clip_CHELSA_bio10_14
+    
+    }
+  }
+}
+}
+}
+
+#### factor analysis
+library(psych)
+
+faparalel<-fa.parallel(varmatrix[,-c(1, 21, 22)], fa="fa")
+var.fa <- fa(varmatrix[,-c(1, 21, 22)], nfactors= 7, fm="ml",rotate="varimax") 
+loadings(var.fa)
+
+
+######## final environmental matrix
+
+climatevar<-varmatrix[,c(2, 3, 14, 15, 21, 22)]
+climatevar<-na.omit(climatevar)
+head(climatevar)
+climatevar<-na.omit(climatevar)
+head(climatevar)
+
+#write.csv(climatevar, "climatevariables.csv")
+
+#########################
+library(adehabitatHR)
+
+library(corrplot)
+df<-na.omit(varmatrix)
+df<-as.data.frame(df)
+
+
+M<-cor(df)
+head(M)
+corrplot(M, method="color")
+corrplot(M, method="number", tl.cex = 0.5, cl.cex = 0.5, number.cex = .7, number.digits = 1)
