@@ -1,0 +1,98 @@
+
+
+
+################Estimating area size
+setwd("C:/Users/piken/OneDrive/Área de Trabalho/scrap")
+tresh<-read.csv("treshold.csv")
+
+library(raster)
+library(rgdal)
+
+##load all raster from a folder into R
+setwd("C:/Users/piken/Google Drive/ascii dendro")
+library(raster)
+rasterlist<-list.files(pattern="*.asc$")
+rasterlist
+rasters<-raster::stack(rasterlist)
+
+for(i in 1:length(tresh$Species)){
+temp<-rasters[[i]]
+crs(temp)<-crs(spmcp)
+temp<-reclassify(temp, c(0,tresh$treshold[i],0, (tresh$treshold[i]+0.0001),1, 1))
+writeRaster(temp, paste(paste0(tresh$Species[i]), ".tif", sep = ""))
+}
+
+
+####extract raster area from iucn polygons
+library(rgdal)
+library(raster)
+setwd("C:/Users/piken/OneDrive/Área de Trabalho/scrap/shapes")
+shps<-list.files(pattern = '*.shp')
+
+setwd("C:/Users/piken/Google Drive/ascii dendro")
+rasterlist<-list.files(pattern="*.tif$")
+rasterlist
+rasters<-raster::stack(rasterlist)
+
+
+# Crop using extent, rasterize polygon and finally, create poly-raster
+#          **** This is the code that you are after ****  
+setwd("C:/Users/piken/OneDrive/Área de Trabalho/scrap/r_iucn")
+
+for(i in 102:length(tresh$Species)){
+  print(i)
+shp<-readOGR(dsn= "C:/Users/piken/OneDrive/Área de Trabalho/scrap/shapes", 
+             layer = tools::file_path_sans_ext(paste(paste0(tresh$sp[i]), ".shp", sep="")))
+
+cr <- crop(rasters[[i]], extent(shp), snap="out")                    
+fr <- rasterize(shp, cr)   
+lr <- mask(x=cr, mask=fr)
+writeRaster(lr, paste(paste0(tresh$Species[1]), ".tif", sep = ""))
+}
+
+####### Couting the number of cells == 1 
+setwd("C:/Users/piken/OneDrive/Área de Trabalho/scrap/r_iucn")
+teste<-raster("Adelphobates_castaneoticus.tif")
+library(landscapemetrics)
+
+pland<- matrix(NA, nrow = 98, ncol = 5)
+colnames(pland)<-c("sp", "pland1", "pland0", "area1", "area0")
+
+area<- data.frame()
+
+for(i in 1:length(rasterlist)){
+  print(i)
+  teste<-raster(paste0(rasterlist[i]))
+  tib1<-as.data.frame(lsm_c_pland(teste))
+  tib2<-as.data.frame(lsm_c_ca(teste))
+  tib3<-rbind(tib1,tib2)
+  tib3$id<-rep(paste0(rasterlist[i]), nrow(tib3))
+  area<-rbind(area, tib3)
+  
+}
+
+
+#write.csv(area, "area_binary_rasters.csv")
+
+####### exploratory analysis
+setwd("C:/Users/piken/OneDrive/Área de Trabalho/scrap")
+explor<-read.csv("teste_data_explor.csv")
+explor2<-explor[-c(7, 15, 35, 53, 58), ]
+
+
+linearmodel<-lm(log(area)~svl, data=explor2)
+par(mfrow=c(2,2))
+plot(linearmodel)
+summary(linearmodel)
+
+
+resi<-residuals(linearmodel)
+
+
+resi_model<-lm(resi~as.factor(explor2$toxic))
+plot(resi_model)
+summary(resi_model)
+plot(resi_model)
+
+
+####
